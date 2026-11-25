@@ -4,9 +4,10 @@ import {
   GoogleAuthProvider,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, googleProvider, db } from './firebase';
+import { auth, db } from './firebase';
 
-export const PRIMARY_OWNER_EMAIL = 'raghurl.202@gmail.com';
+export const PRIMARY_OWNERS = ['raghurl.2072@gmail.com', 'raghurl.202@gmail.com'];
+export const PRIMARY_OWNER_EMAIL = 'raghurl.2072@gmail.com';
 
 export interface AdminAuthResult {
   authorized: boolean;
@@ -17,7 +18,7 @@ export interface AdminAuthResult {
 
 /**
  * Verify if email has admin privileges:
- * 1. Primary Owner check: raghurl.202@gmail.com is unconditionally authorized
+ * 1. Primary Owner check: raghurl.2072@gmail.com or raghurl.202@gmail.com is unconditionally authorized
  * 2. Firestore check: admins/{email} with active === true
  */
 export async function verifyAdminStatus(email: string | null | undefined): Promise<AdminAuthResult> {
@@ -27,9 +28,8 @@ export async function verifyAdminStatus(email: string | null | undefined): Promi
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  // Primary owner always has access
-  if (normalizedEmail === PRIMARY_OWNER_EMAIL.toLowerCase()) {
-    // Ensure primary owner record exists in Firestore for tracking
+  // Primary owners always have permanent access
+  if (PRIMARY_OWNERS.includes(normalizedEmail)) {
     try {
       const docRef = doc(db, 'admins', normalizedEmail);
       const snap = await getDoc(docRef);
@@ -86,7 +86,6 @@ export async function signInWithGoogle(): Promise<AdminAuthResult> {
     const authStatus = await verifyAdminStatus(user.email);
 
     if (!authStatus.authorized) {
-      // Force sign-out immediately for unauthorized accounts
       await firebaseSignOut(auth);
       return authStatus;
     }

@@ -1,230 +1,194 @@
-# PROJECT_HISTORY.md — Gozi Web (Admin + Public Website)
+# GOZI QUICK-COMMERCE ARCHITECTURE & PROJECT HISTORY
 
-## Overview
-**Gozi** is a hyperlocal quick-commerce delivery platform in **Hetauda, Makwanpur, Nepal**.  
-This codebase is the **web application**: a public business website + a protected `/admin` operations panel.
-
-| Property | Value |
-|---|---|
-| **Stack** | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS |
-| **Backend** | Firebase (Auth + Cloud Firestore) |
-| **Firebase Project** | `gozi-4d81e` |
-| **Primary Owner** | `raghurl.202@gmail.com` |
-| **Icons** | `lucide-react` (zero emojis) |
-| **Brand Colors** | White `#FFFFFF` surfaces, Gozi green `#16A34A`/`#15803D` accents |
+**Hyperlocal Quick-Commerce Platform for Hetauda, Makwanpur, Nepal**
+*Last Rebuilt & Hardened: 2026-11-25*
 
 ---
 
-## Architecture
-
-```
-gozi-web/
-├── public/
-│   └── gozi-logo.png              # Brand logo asset
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx              # Root layout (Geist fonts, global CSS)
-│   │   ├── page.tsx                # Public home page (/)
-│   │   ├── about/page.tsx          # /about
-│   │   ├── privacy-policy/page.tsx # /privacy-policy
-│   │   ├── refund-policy/page.tsx  # /refund-policy
-│   │   ├── terms/page.tsx          # /terms
-│   │   └── admin/page.tsx          # /admin — Protected admin dashboard
-│   ├── components/
-│   │   ├── PublicHeader.tsx         # Navbar for public pages
-│   │   ├── PublicFooter.tsx         # Footer with Hetauda info
-│   │   └── admin/
-│   │       ├── AdminLogin.tsx       # Google SSO login screen
-│   │       ├── OverviewModule.tsx   # Module 1: KPIs, store toggle, analytics
-│   │       ├── LiveOrdersModule.tsx # Module 2: Real-time order dispatch
-│   │       ├── RidersModule.tsx     # Module 3: Fleet management & payouts
-│   │       ├── CatalogModule.tsx    # Module 4: Categories & products CRUD
-│   │       ├── OrderHistoryModule.tsx # Module 5: Paginated past orders
-│   │       └── SettingsModule.tsx   # Module 6: Store config & admin access
-│   ├── lib/
-│   │   ├── firebase.ts             # Firebase Web SDK init
-│   │   ├── adminAuth.ts            # Google Auth + Firestore admin verification
-│   │   ├── AdminAuthContext.tsx     # React context for admin session
-│   │   └── soundAlert.ts           # Web Audio API order chime
-│   └── types/
-│       └── index.ts                # Shared TypeScript types
-├── .env.local                      # Firebase env vars
-├── package.json
-├── tailwind.config.ts
-└── tsconfig.json
-```
+## 1. System Overview & Multi-App Synergy
+The Gozi ecosystem consists of three synchronized client applications sharing a single, optimized Cloud Firestore database (`gozi-4d81e`):
+1. **Gozi Web & Admin Operations Portal (`gozi-web`)**:
+   - Public landing page (`/`), policy pages (`/about`, `/privacy-policy`, `/refund-policy`, `/terms`).
+   - Protected Admin Command Center (`/admin`) for store dispatch, catalog management, finance, and rider payouts.
+2. **Gozi Consumer Mobile App (`gozi-consumer-app`)**:
+   - Fast React Native (Expo) app for customer ordering with Blinkit-style category grids, 3-column curated combo shelves, and real-time delivery tracking.
+3. **Gozi Rider App (Targeted Architecture)**:
+   - Dedicated delivery app where fleet riders log in via unique `loginId` + `loginPin`, view assigned pickup bags in `ready_to_deliver`, accept handover, and mark orders delivered with COD payment collection.
 
 ---
 
-## Firestore Schema
+## 2. Sequential Order & Product ID Architecture
+All three apps share unified, human-readable auto-incrementing identifiers maintained atomically in `settings/counters`:
+- **Orders**: `G-1001`, `G-1002`, `G-1003`...
+- **Products**: `P-1001`, `P-1002`, `P-1003`...
+- **Riders**: `RIDER-01`, `RIDER-02`...
+
+Implementation uses Firestore `runTransaction` to guarantee zero duplicate IDs across concurrent checkouts.
+
+---
+
+## 3. End-to-End Order Status Lifecycle Pipeline
+```mermaid
+stateDiagram-v2
+    [*] --> pending: Customer Places COD Order (G-xxxx)
+    pending --> ready_to_deliver: Admin Packs Items within 120s
+    ready_to_deliver --> handover: Rider Accepts Order / Handover Bag
+    handover --> on_the_way: Rider Dispatches to Doorstep
+    on_the_way --> reached: Rider Arrives at Street Landmark
+    reached --> delivered: Cash Collected & Order Finished
+    pending --> cancelled: Cancelled with Reason
+    ready_to_deliver --> cancelled: Cancelled with Reason
+```
+
+- **Exact 5-Second Single Buzz Alert**: When a new order arrives with status `pending`, an alert chime sounds for exactly 5000ms using Web Audio API and auto-terminates.
+- **Quota-Safe Snapshot**: Real-time listeners bind strictly to non-terminal orders (`where('status', 'in', ['pending', 'ready_to_deliver', 'handover', 'on_the_way', 'reached'])`). Delivered and cancelled orders are fetched on-demand or targeted by `deliveredDate: 'YYYY-MM-DD'`.
+
+---
+
+## 4. Firestore Database Schema
+
+### `settings/counters`
+```typescript
+{
+  lastOrderNumber: number;   // 1000 -> 1001
+  lastProductNumber: number; // 1000 -> 1001
+  lastRiderNumber: number;   // 0 -> 1
+  updatedAt: string;
+}
+```
 
 ### `settings/appConfig`
-| Field | Type | Description |
-|---|---|---|
-| `isStoreOpen` | boolean | Master store open/closed toggle |
-| `deliveryFee` | number | Delivery fee in NPR |
-| `freeDeliveryAbove` | number | Free delivery threshold (0 = always charged) |
-| `minOrderValue` | number | Minimum order value |
-| `estimatedMinutesText` | string | Display text ("10-15 mins") |
-| `catalogVersion` | number | Incremented on any catalog change |
+```typescript
+{
+  isStoreOpen: boolean;
+  deliveryFee: number;            // Rs. 30
+  freeDeliveryAbove: number;      // Rs. 500
+  minOrderValue: number;          // Rs. 99
+  estimatedMinutesText: string;   // "10-15 mins"
+  catalogVersion: number;         // Increments on any catalog edit to refresh client cache
+  sectionOrder: string[];         // Array of Section IDs defining storefront order
+  cloudinaryConfig: {
+    cloudName: string;
+    uploadPreset: string;
+    enabled: boolean;
+  }
+}
+```
 
-### `admins/{email}`
-| Field | Type | Description |
-|---|---|---|
-| `email` | string | Admin email (lowercase) |
-| `role` | string | `owner` or `admin` |
-| `active` | boolean | Whether access is active |
-| `addedAt` | string | ISO timestamp |
+### `sections/{sectionId}` (Level 1)
+```typescript
+{
+  id: string;
+  name: string;               // e.g. "Grocery & Kitchen", "Late Night Combos"
+  slug: string;
+  displayOrder: number;
+  isActive: boolean;
+  isCuratedShelf: boolean;    // true for 3-column product grid shelves
+  shelfType: 'standard' | 'combos' | 'frozen' | 'trending';
+  description: string;
+}
+```
 
-### `orders/{orderId}`
-| Field | Type | Description |
-|---|---|---|
-| `orderNumber` | string | Display order number |
-| `userId` | string | Customer UID |
-| `customerName` | string | Customer full name |
-| `customerPhone` | string | +977 phone number |
-| `deliveryAddress` | object | `{fullAddress, landmark?, lat, lng}` |
-| `items` | array | `[{productId, name, unit, price, qty, imageUrl}]` |
-| `bill` | object | `{itemTotal, deliveryFee, grandTotal}` |
-| `paymentMethod` | string | `COD` |
-| `status` | string | `placed → packing → handover → reached → delivered` or `cancelled` |
-| `riderId` | string? | Assigned rider document ID |
-| `riderDetails` | object? | `{name, phone}` |
-| `cancelReason` | string? | Reason if cancelled |
-| `createdAt` | string | ISO timestamp |
-| `deliveredAt` | string? | ISO timestamp when delivered |
-| `updatedAt` | string | ISO timestamp |
+### `categories/{categoryId}` (Level 2)
+```typescript
+{
+  id: string;
+  name: string;               // e.g. "Atta, Rice & Dal"
+  slug: string;
+  sectionId: string;
+  sectionName: string;
+  imageUrl: string;           // Direct image upload (<150KB WebP)
+  displayOrder: number;
+  isActive: boolean;
+}
+```
+
+### `products/{productId}` (Level 3)
+```typescript
+{
+  id: string;
+  productNumber: string;      // "P-1001"
+  name: string;
+  description: string;
+  sectionId: string;
+  categoryId: string;
+  unit: string;               // "1 kg", "500 ml", "Combo Set"
+  mrp: number;
+  sellingPrice: number;
+  costPrice: number;          // For net profit calculation
+  discountPercent: number;
+  stockQuantity: number | null; // null = unlimited, int = auto-decrement
+  inStock: boolean;
+  images: string[];
+  isTrending: boolean;
+  isCombo: boolean;
+  isFrozen: boolean;
+  feedPriority: number;       // 1 - 100
+  totalSold: number;
+  totalRevenue: number;
+}
+```
 
 ### `riders/{riderId}`
-| Field | Type | Description |
-|---|---|---|
-| `name` | string | Rider name |
-| `phone` | string | Phone number |
-| `vehicleNumber` | string | Vehicle plate |
-| `commissionType` | string | `fixed` or `percentage` |
-| `commissionRate` | number | Rs per order or % |
-| `isActive` | boolean | Active vs suspended |
-| `status` | string | `online`, `busy`, `offline` |
-| `currentOrderId` | string? | Currently assigned order |
-| `todayDeliveries` | number | Today's count |
-| `allTimeDeliveries` | number | Lifetime count |
-| `unpaidCommission` | number | Pending payout in Rs |
-| `totalCommissionEarned` | number | Lifetime earned |
-| `lastPayoutDate` | string? | Last payout timestamp |
+```typescript
+{
+  id: string;
+  riderNumber: string;        // "RIDER-01"
+  name: string;
+  phone: string;
+  address: string;
+  vehicleNumber: string;
+  loginId: string;            // Rider App credentials
+  loginPin: string;
+  commissionType: 'fixed' | 'percentage';
+  commissionRate: number;     // Rs. 35/delivery
+  status: 'online' | 'busy' | 'offline';
+  todayDeliveries: number;
+  totalDeliveries: number;
+  unpaidBalance: number;
+  totalEarnings: number;
+  payoutHistory: Array<{
+    id: string;
+    amount: number;
+    paymentMethod: 'Cash' | 'eSewa' | 'Khalti' | 'Bank Transfer';
+    note: string;
+    createdAt: string;
+  }>;
+}
+```
 
-### `categories/{categoryId}`
-| Field | Type | Description |
-|---|---|---|
-| `name` | string | Category name |
-| `imageUrl` | string | Category thumbnail |
-| `department` | string | One of 5 departments |
-| `priorityOrder` | number | Sort order |
-| `isActive` | boolean | Visible in app |
-
-### `products/{productId}`
-| Field | Type | Description |
-|---|---|---|
-| `name` | string | Product name |
-| `description` | string | Description |
-| `categoryId` | string | Parent category |
-| `department` | string | Department |
-| `unit` | string | "1 kg", "500 ml", etc. |
-| `mrp` | number | MRP in Rs |
-| `sellingPrice` | number | Selling price |
-| `discountPercent` | number | Discount % |
-| `images` | string[] | Image URLs |
-| `inStock` | boolean | Stock toggle |
-| `isHidden` | boolean | Hidden from customers |
-| `isTrending` | boolean | Trending flag |
-| `isCombo` | boolean? | Combo flag |
-
-### `analytics/daily_{YYYY-MM-DD}`
-| Field | Type | Description |
-|---|---|---|
-| `date` | string | Date key |
-| `totalOrders` | number | Total orders placed |
-| `deliveredOrders` | number | Successfully delivered |
-| `cancelledOrders` | number | Cancelled count |
-| `totalRevenue` | number | Revenue from delivered orders |
-
----
-
-## Admin Modules
-
-### Module 1: Overview
-- KPI cards: active orders, today's orders, revenue, online riders
-- Store open/close toggle
-- Daily analytics from `analytics/daily_{date}`
-
-### Module 2: Live Orders (Default Landing)
-- Real-time `onSnapshot` on orders with status `in [placed, packing, handover, reached]`
-- Repeating Web Audio chime alarm for `placed` orders
-- Order dispatch flow: `placed → packing → handover (assign rider) → reached → delivered`
-- Cancel at any stage
-- Atomically updates `analytics` on delivery/cancellation
-- Frees rider when order is delivered/cancelled
-
-### Module 3: Riders
-- Add/edit rider modal (name, phone, vehicle, commission setup)
-- Online/Busy/Offline status badges (live from Firestore)
-- Today's deliveries and all-time stats
-- Payout settlement: resets `unpaidCommission` and records payout
-
-### Module 4: Catalog Manager
-- Two sub-tabs: Categories | Products
-- Categories grouped by department (5 departments)
-- Products: search, filter by department/stock, sortable table
-- 1-click in-stock/out-of-stock toggle
-- Trending and combo flags
-- Every mutation bumps `catalogVersion` in `settings/appConfig`
-
-### Module 5: Order History
-- Paginated on-demand query (`limit(25)`) for `delivered` and `cancelled` orders
-- Filter by status (all / delivered / cancelled)
-- Client-side search by order ID, name, or phone
-- Expandable order detail card with itemized table
-
-### Module 6: Store Settings
-- Delivery fee, free-delivery threshold, min order value, ETA text
-- Admin access management (add/remove emails)
-- Primary owner `raghurl.202@gmail.com` has permanent irrevocable access
-
----
-
-## Public Pages
-1. **Home (`/`)**: Hero, 3-step "How It Works", category overview, download CTA
-2. **About (`/about`)**: Hetauda story, mission, operational hours
-3. **Privacy Policy (`/privacy-policy`)**: Firebase + Nepal compliance
-4. **Refund Policy (`/refund-policy`)**: Cancellation rules, COD adjustments
-5. **Terms (`/terms`)**: Legal terms for Hetauda delivery, NPR pricing
-
----
-
-## Auth Flow
-1. Admin visits `/admin` → sees Google Sign-In screen
-2. Signs in via Google popup
-3. If email is `raghurl.202@gmail.com` → unconditional owner access
-4. Otherwise checks `admins/{email}` in Firestore for `active: true`
-5. Unauthorized accounts are immediately signed out
-
----
-
-## Quota-Safe Design
-- Active orders: real-time listener only on `status in [placed, packing, handover, reached]`
-- History orders: paginated on-demand query (`limit(25)`)
-- Analytics: single lightweight document per day (`analytics/daily_{date}`)
-- Catalog changes bump `catalogVersion` so mobile app cache stays in sync
-
----
-
-## Build & Run
-```bash
-npm install
-npm run dev    # Development server
-npm run build  # Production build
-npm start      # Production server
+### `analytics/daily_{YYYY-MM-DD}` (Quota-Safe Financial Reporting)
+```typescript
+{
+  date: string;               // "2026-11-25"
+  totalOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+  totalRevenue: number;
+  totalDeliveryFees: number;
+  totalProfit: number;
+  totalPiecesSold: number;
+  productsSold: {
+    [productId: string]: {
+      productId: string;
+      name: string;
+      categoryName: string;
+      qty: number;
+      revenue: number;
+      profit: number;
+    }
+  }
+}
 ```
 
 ---
 
-*Last updated: 2026-11-25*
+## 5. Security & Authentication Architecture
+- **Primary Permanent Owners**:
+  - `raghurl.2072@gmail.com`
+  - `raghurl.202@gmail.com`
+- **Dynamic Admins**: Any additional managers added via Admin Panel stored at `admins/{email}` (`active: true`).
+- **Account Selection Enforced**: Google Auth popup uses `prompt: 'select_account'` and `auth_type: 'rerequest'` so users can switch between multiple Google accounts on the same machine without browser cache lockouts.
+- **Rules Hardened**:
+  - Server-side token validation: `request.auth.token.email.lower() == 'raghurl.2072@gmail.com'`.
+  - Client-side code injection cannot bypass rules.

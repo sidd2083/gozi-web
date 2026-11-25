@@ -4,13 +4,14 @@
  */
 
 let audioCtx: AudioContext | null = null;
-let chimeInterval: NodeJS.Timeout | null = null;
+let buzzInterval: NodeJS.Timeout | null = null;
+let stopTimeout: NodeJS.Timeout | null = null;
 let isMuted: boolean = false;
 
-function getAudioContext(): AudioContext | null {
+export function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass) {
       audioCtx = new AudioContextClass();
     }
@@ -66,24 +67,53 @@ export function playChimeTone() {
 }
 
 /**
- * Start repeating alarm for new incoming 'placed' orders until acknowledged
+ * EXACT 5-SECOND SINGLE BUZZ RULE:
+ * Plays an urgent buzzer chime and automatically terminates after exactly 5000ms.
  */
-export function startContinuousOrderAlert() {
-  if (chimeInterval) return; // already chiming
+export function playFiveSecondBuzzAlert() {
+  if (isMuted) return;
+
+  // Clear any existing active buzz
+  stopAudioAlert();
+
+  // Play immediately
   playChimeTone();
-  chimeInterval = setInterval(() => {
+
+  // Repeat every 1.2s during the 5s window
+  buzzInterval = setInterval(() => {
     playChimeTone();
-  }, 3500); // repeat every 3.5 seconds
+  }, 1200);
+
+  // Hard stop at exactly 5000ms
+  stopTimeout = setTimeout(() => {
+    stopAudioAlert();
+  }, 5000);
 }
 
 /**
- * Stop alarm when order is accepted or muted
+ * Stop any running sound alert
  */
-export function stopContinuousOrderAlert() {
-  if (chimeInterval) {
-    clearInterval(chimeInterval);
-    chimeInterval = null;
+export function stopAudioAlert() {
+  if (buzzInterval) {
+    clearInterval(buzzInterval);
+    buzzInterval = null;
   }
+  if (stopTimeout) {
+    clearTimeout(stopTimeout);
+    stopTimeout = null;
+  }
+}
+
+/**
+ * Unlock Web Audio on user gesture (e.g. Test Sound button)
+ */
+export function unlockAudio(): boolean {
+  const ctx = getAudioContext();
+  if (ctx && ctx.state === 'suspended') {
+    ctx.resume();
+  }
+  playChimeTone();
+  return true;
 }
 
 /**
@@ -92,7 +122,7 @@ export function stopContinuousOrderAlert() {
 export function setAudioMuted(muted: boolean) {
   isMuted = muted;
   if (muted) {
-    stopContinuousOrderAlert();
+    stopAudioAlert();
   }
 }
 

@@ -10,10 +10,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Check if the authenticated user is an authorized admin
+    // Check if the authenticated user is an authorized store admin or permanent owner
     function isAdmin() {
       return isAuthenticated() && (
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'raghurl.202@gmail.com') ||
+        (request.auth.token.email != null && (
+          request.auth.token.email.lower() == 'raghurl.2072@gmail.com' ||
+          request.auth.token.email.lower() == 'raghurl.202@gmail.com'
+        )) ||
         (
           request.auth.token.email != null &&
           exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())) &&
@@ -34,80 +37,81 @@ service cloud.firestore {
     // 1. Admins Collection
     // -------------------------------------------------------------
     match /admins/{email} {
-      // Admins manage the admin allowlist
       allow read, write: if isAdmin();
     }
 
     // -------------------------------------------------------------
-    // 2. Settings Collection (appConfig, deliveryFee, isStoreOpen)
+    // 2. Settings Collection (appConfig, counters, store status)
     // -------------------------------------------------------------
     match /settings/{settingId} {
-      // Consumers, Riders & Admin can read store status, fees, and catalog version
+      // Consumers & Riders can read store open status, delivery fees, and catalogVersion
       allow read: if true;
-      // Only admins can change store configuration
+      // Admins have write access; sequential order counter increment is allowed during transaction
+      allow write: if isAdmin() || (settingId == 'counters' && isAuthenticated());
+    }
+
+    // -------------------------------------------------------------
+    // 3. Sections Collection (Storefront Layout hierarchy)
+    // -------------------------------------------------------------
+    match /sections/{sectionId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
     // -------------------------------------------------------------
-    // 3. Categories Collection
+    // 4. Categories Collection (Blinkit-style Category Grid)
     // -------------------------------------------------------------
     match /categories/{categoryId} {
-      // Public read for customer app & riders
       allow read: if true;
-      // Only admins can add, update or delete categories
       allow write: if isAdmin();
     }
 
     // -------------------------------------------------------------
-    // 4. Products Collection
+    // 5. Products Collection (Catalog, 1-Click Stock, Shelves)
     // -------------------------------------------------------------
     match /products/{productId} {
-      // Public read for catalog browsing and stock checks
       allow read: if true;
-      // Only admins can update products, prices, and stock status
       allow write: if isAdmin();
     }
 
     // -------------------------------------------------------------
-    // 5. Riders Collection (Fleet profiles & status)
+    // 6. Riders Collection (Fleet profiles, login credentials & ledger)
     // -------------------------------------------------------------
     match /riders/{riderId} {
-      // Admins can manage all riders
+      // Admins manage all riders, commissions, and payout records
       allow read, write: if isAdmin();
-      // Rider can read their own profile and update their online status/location
-      allow read: if isAuthenticated() && request.auth.uid == riderId;
-      allow update: if isAuthenticated() && request.auth.uid == riderId;
+      // Riders can read/update their live status and location in the Rider App
+      allow read, update: if isAuthenticated() && (request.auth.uid == riderId || isAdmin());
     }
 
     // -------------------------------------------------------------
-    // 6. Analytics Collection (Daily revenue & order counts)
+    // 7. Analytics Collection (Daily reports & Global stats)
     // -------------------------------------------------------------
     match /analytics/{docId} {
-      // Exclusively managed by admins
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      // Allow write during order completion transaction
+      allow write: if isAdmin() || isRider() || isAuthenticated();
     }
 
     // -------------------------------------------------------------
-    // 7. Users Collection (Customer profiles & saved addresses)
+    // 8. Users Collection (Customer profiles & saved addresses)
     // -------------------------------------------------------------
     match /users/{userId} {
-      // Anyone can create/register account during signup
       allow create: if true;
-      // Customer can read/update their own profile; admins have full access
       allow read, update: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) || true;
     }
 
     // -------------------------------------------------------------
-    // 8. Orders Collection (Core Dispatch Pipeline)
+    // 9. Orders Collection (Core Dispatch Pipeline)
     // -------------------------------------------------------------
     match /orders/{orderId} {
-      // Consumers can place orders
+      // Customers can create orders with sequential G-xxxx numbers
       allow create: if true;
 
       // Real-time tracking:
       // - Admins can read all orders
-      // - Assigned Rider can read and update their assigned orders (handover, reached, delivered)
-      // - Customer can track their own order
+      // - Assigned Rider can read and update their assigned orders (ready_to_deliver, handover, on_the_way, reached, delivered)
+      // - Customer can track their own order by userId or orderId
       allow read: if true;
       allow update: if isAdmin() || isRider() || (
         isAuthenticated() && resource.data.userId == request.auth.uid

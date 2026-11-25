@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 /**
  * Firebase Web Configuration
@@ -19,7 +20,11 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db: Firestore = getFirestore(app);
 const auth: Auth = getAuth(app);
+const storage: FirebaseStorage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
+googleProvider.setCustomParameters({ 
+  prompt: 'select_account',
+  auth_type: 'rerequest'
+});
 
-export { app, db, auth, googleProvider, firebaseConfig };
+export { app, db, auth, storage, googleProvider, firebaseConfig };

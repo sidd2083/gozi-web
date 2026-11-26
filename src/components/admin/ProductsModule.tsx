@@ -24,7 +24,8 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
-  increment
+  increment,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Product, StoreSection, Category } from '@/types';
@@ -64,6 +65,265 @@ export const ProductsModule: React.FC = () => {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+
+  // Fast 1-Click Starter Products Seeder (Populates Firestore directly from Admin)
+  const handleSeedStarterProducts = async () => {
+    try {
+      setIsSeeding(true);
+      const STARTERS = [
+        {
+          id: 'prod-salt-iodized',
+          productNumber: 'P-1001',
+          name: 'Aayo Noon Pure Iodized Salt',
+          description: 'Refined iodized crystal salt for daily cooking and essential nutrition.',
+          categoryId: 'cat-oil-ghee-masala',
+          categoryName: 'Oil, Ghee & Masala',
+          sectionName: 'Grocery & Kitchen',
+          unit: '1 kg',
+          mrp: 35,
+          sellingPrice: 30,
+          costPrice: 24,
+          discountPercent: 14,
+          images: ['https://images.unsplash.com/photo-1518110925495-5fe2fda0442c?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-mustard-oil',
+          productNumber: 'P-1002',
+          name: 'Dhara Kachi Ghani Mustard Oil',
+          description: 'Cold pressed aromatic pure mustard oil for authentic taste.',
+          categoryId: 'cat-oil-ghee-masala',
+          categoryName: 'Oil, Ghee & Masala',
+          sectionName: 'Grocery & Kitchen',
+          unit: '1 Ltr',
+          mrp: 295,
+          sellingPrice: 265,
+          costPrice: 235,
+          discountPercent: 10,
+          images: ['https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-milk-toned',
+          productNumber: 'P-1003',
+          name: 'DDC Standard Fresh Milk Pouch',
+          description: 'Chilled pasteurized standard cow-buffalo blended milk delivered fresh.',
+          categoryId: 'cat-dairy-bread-eggs',
+          categoryName: 'Dairy, Bread & Eggs',
+          sectionName: 'Grocery & Kitchen',
+          unit: '500 ml',
+          mrp: 50,
+          sellingPrice: 50,
+          costPrice: 44,
+          discountPercent: 0,
+          images: ['https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-bread-sliced',
+          productNumber: 'P-1004',
+          name: 'Suprim Fresh Sliced White Bread',
+          description: 'Soft bakery bread baked fresh today, perfect for toast and sandwiches.',
+          categoryId: 'cat-dairy-bread-eggs',
+          categoryName: 'Dairy, Bread & Eggs',
+          sectionName: 'Grocery & Kitchen',
+          unit: '400 g',
+          mrp: 65,
+          sellingPrice: 60,
+          costPrice: 48,
+          discountPercent: 8,
+          images: ['https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-eggs-crate',
+          productNumber: 'P-1005',
+          name: 'Fresh Farm Brown Eggs (Crate of 6)',
+          description: 'Clean farm-fresh protein-rich table eggs carefully packed in paper carton.',
+          categoryId: 'cat-dairy-bread-eggs',
+          categoryName: 'Dairy, Bread & Eggs',
+          sectionName: 'Grocery & Kitchen',
+          unit: '6 pcs',
+          mrp: 120,
+          sellingPrice: 105,
+          costPrice: 85,
+          discountPercent: 12,
+          images: ['https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-cadbury-silk',
+          productNumber: 'P-1006',
+          name: 'Cadbury Dairy Milk Silk Chocolate',
+          description: 'Smooth, creamy chocolate bar that melts in your mouth with rich cocoa.',
+          categoryId: 'cat-sweets-chocolates',
+          categoryName: 'Sweets & Chocolates',
+          sectionName: 'Snacks & Drinks',
+          unit: '60 g',
+          mrp: 140,
+          sellingPrice: 125,
+          costPrice: 105,
+          discountPercent: 11,
+          images: ['https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-coca-cola-can',
+          productNumber: 'P-1007',
+          name: 'Coca-Cola Chilled Refreshment Can',
+          description: 'Ice cold carbonated cola soda can delivered chilled to your doorstep.',
+          categoryId: 'cat-drinks-juices',
+          categoryName: 'Drinks & Juices',
+          sectionName: 'Snacks & Drinks',
+          unit: '330 ml',
+          mrp: 85,
+          sellingPrice: 75,
+          costPrice: 60,
+          discountPercent: 12,
+          images: ['https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-lays-magic-masala',
+          productNumber: 'P-1008',
+          name: "Lay's India's Magic Masala Potato Chips",
+          description: 'Crispy ridged potato chips seasoned with spicy authentic blend.',
+          categoryId: 'cat-chips-namkeen',
+          categoryName: 'Chips & Namkeen',
+          sectionName: 'Snacks & Drinks',
+          unit: '50 g',
+          mrp: 50,
+          sellingPrice: 45,
+          costPrice: 36,
+          discountPercent: 10,
+          images: ['https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-wai-wai-noodles',
+          productNumber: 'P-1009',
+          name: 'Wai Wai Ready Instant Noodles (Pack of 5)',
+          description: 'Spiced pre-cooked noodles with chili oil and onion powder.',
+          categoryId: 'cat-instant-food',
+          categoryName: 'Instant Food',
+          sectionName: 'Snacks & Drinks',
+          unit: '5 x 75 g',
+          mrp: 125,
+          sellingPrice: 110,
+          costPrice: 92,
+          discountPercent: 12,
+          images: ['https://images.unsplash.com/photo-1612927601601-6638404737ce?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'combo-midnight-munch',
+          productNumber: 'P-1010',
+          name: 'Midnight Gamer Craving Combo',
+          description: '1x Chilled Coke 330ml + 1x Lays Magic Masala + 1x Cadbury Silk 60g.',
+          categoryId: 'cat-chips-namkeen',
+          categoryName: 'Chips & Namkeen',
+          sectionName: 'Late Night Combos',
+          unit: 'Combo Pack (3 Items)',
+          mrp: 275,
+          sellingPrice: 235,
+          costPrice: 195,
+          discountPercent: 15,
+          images: ['https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          isCombo: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'prod-frozen-momo',
+          productNumber: 'P-1011',
+          name: 'Chicken Juicy Steamed Momo (Pack of 20)',
+          description: 'Handcrafted frozen spiced chicken dumplings with fiery tomato timur achar.',
+          categoryId: 'cat-chicken-meat-fish',
+          categoryName: 'Chicken, Meat & Fish',
+          sectionName: 'Frozen Items',
+          unit: '20 pcs (500 g)',
+          mrp: 320,
+          sellingPrice: 280,
+          costPrice: 220,
+          discountPercent: 12,
+          images: ['https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=400&auto=format&fit=crop&q=75'],
+          inStock: true,
+          isHidden: false,
+          isTrending: true,
+          isFrozen: true,
+          storeId: 'store-hetauda-main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      ];
+
+      const batch = writeBatch(db);
+      for (const p of STARTERS) {
+        batch.set(doc(db, 'products', p.id), p, { merge: true });
+      }
+      await batch.commit();
+
+      // Bump catalogVersion so mobile app cache invalidates
+      await updateDoc(doc(db, 'settings', 'appConfig'), {
+        catalogVersion: increment(1),
+      });
+
+      setIsSeeding(false);
+    } catch (err) {
+      console.error('Seeding error:', err);
+      setIsSeeding(false);
+    }
+  };
 
   // 1. Subscribe to Products
   useEffect(() => {
@@ -286,13 +546,25 @@ export const ProductsModule: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition shadow-sm"
-        >
-          <Plus size={16} />
-          <span>Add New Product</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {products.length === 0 && (
+            <button
+              onClick={handleSeedStarterProducts}
+              disabled={isSeeding}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] text-xs font-bold rounded-xl transition border border-blue-200"
+            >
+              <Sparkles size={15} />
+              <span>{isSeeding ? 'Loading Catalog...' : 'Load Starter Catalog'}</span>
+            </button>
+          )}
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition shadow-sm"
+          >
+            <Plus size={16} />
+            <span>Add New Product</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Controls */}
